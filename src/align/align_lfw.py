@@ -158,4 +158,4 @@ def parse_arguments(argv):
 if __name__ == '__main__':
     main(parse_arguments(sys.argv[1:]))
 
-
+#/home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/raw_images /home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/aligned_images

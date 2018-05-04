@@ -44,6 +44,7 @@ import mxnet as mx
 from mxnet import ndarray as nd
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 import face_image
+from matplotlib import pyplot as plt
 
 
 class LFold:
@@ -157,6 +158,14 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
     return val_mean, val_std, far_mean
 
 
+def get_distance(embeddings1, embeddings2):
+    assert (embeddings1.shape[0] == embeddings2.shape[0])
+    assert (embeddings1.shape[1] == embeddings2.shape[1])
+    diff = np.subtract(embeddings1, embeddings2)
+    dist = np.sum(np.square(diff), 1)
+    return dist
+
+
 def calculate_val_far(threshold, dist, actual_issame):
     predict_issame = np.less(dist, threshold)
     true_accept = np.sum(np.logical_and(predict_issame, actual_issame))
@@ -181,6 +190,15 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca = 0):
         np.asarray(actual_issame), 1e-3, nrof_folds=nrof_folds)
     return tpr, fpr, accuracy, val, val_std, far
 
+def evaluate_distance(embeddings, actual_issame):
+    # Calculate evaluation metrics
+    embeddings1 = embeddings[0::2]
+    embeddings2 = embeddings[1::2]
+    dist = get_distance(embeddings1=embeddings1, embeddings2=embeddings2)
+
+    return _
+
+
 def load_bin(path, image_size):
   bins, issame_list = pickle.load(open(path, 'rb'))
   data_list = []
@@ -190,6 +208,7 @@ def load_bin(path, image_size):
   for i in xrange(len(issame_list)*2):
     _bin = bins[i]
     img = mx.image.imdecode(_bin)
+    # img = _bin
     img = nd.transpose(img, axes=(2, 0, 1))
     for flip in [0,1]:
       if flip==1:
@@ -505,9 +524,12 @@ if __name__ == '__main__':
 
   parser = argparse.ArgumentParser(description='do verification')
   # general
-  parser.add_argument('--data-dir', default='', help='')
-  parser.add_argument('--model', default='../model/softmax,50', help='path to load model.')
-  parser.add_argument('--target', default='lfw,cfp_ff,cfp_fp,agedb_30', help='test targets.')
+  parser.add_argument('--data-dir', default='../../datasets/faces_ms1m_112x112', help='')
+  # parser.add_argument('--data-dir', default='/home/deepjunior/PycharmProjects/unit_swap/InsightFace_TF/datasets/lfw_bin_changed', help='')
+
+  parser.add_argument('--model', default='../../models/model-r34-amf/model, 0', help='path to load model.')
+  # parser.add_argument('--target', default='lfw,cfp_ff,cfp_fp,agedb_30', help='test targets.')
+  parser.add_argument('--target', default='lfw', help='test targets.')
   parser.add_argument('--gpu', default=0, type=int, help='gpu id')
   parser.add_argument('--batch-size', default=32, type=int, help='')
   parser.add_argument('--max', default='', type=str, help='')

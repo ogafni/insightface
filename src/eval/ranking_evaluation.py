@@ -42,8 +42,11 @@ import pickle
 from sklearn.decomposition import PCA
 import mxnet as mx
 from mxnet import ndarray as nd
+import mxnet.image.image as mximg
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
+sys.path.append('/home/deepjunior/PycharmProjects/unit_swap/insightface/deploy')
+from face_embedding import FaceModel
 import face_image
 from matplotlib import pyplot as plt
 
@@ -199,6 +202,7 @@ def evaluate(embeddings, actual_issame, nrof_folds=10, pca=0):
                                       np.asarray(actual_issame), 1e-3, nrof_folds=nrof_folds)
     return tpr, fpr, accuracy, val, val_std, far
 
+
 #
 # def evaluate_distance(embeddings, actual_issame):
 #     # Calculate evaluation metrics
@@ -311,23 +315,61 @@ def test(data_set, mx_model, batch_size, nfolds=10, data_extra=None, label_shape
     return acc1, std1, acc2, std2, _xnorm, embeddings_list
 
 
-def get_img_from_path(image_path):
-    img = cv2.imread(image_path) * 1.0
-    img = cv2.resize(img, (112, 112))
-    img = np.reshape(img, (3, 112, 112))
-    return img
+# def get_img_from_path(image_path):
+#     img = cv2.imread(image_path)
+#     img = cv2.resize(img, (112, 112))
+#     # img = np.reshape(img, (3, 112, 112))
+#     img = 255.0 - cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     img = np.transpose(img, (2, 0, 1))
+#     return img
 
-def test_ranking(data_set, mx_model, batch_size, source_img_path, target_img_path, fake_target_img_path,
+def get_img_from_path(fname):
+    img = cv2.cvtColor(cv2.imread(fname), cv2.COLOR_BGR2RGB)
+    if img is None:
+         print('No image found for: ', fname)
+         return None
+    # convert into format (batch, RGB, width, height)
+    img = cv2.resize(img, (112, 112))
+    img = np.swapaxes(img, 0, 2)
+    img = np.swapaxes(img, 1, 2)
+    img = img[np.newaxis, :]
+    return mx.nd.array(img)
+
+def img_path_to_list(path):
+    img_list = []
+    dir_scanned = os.listdir(path)
+    for file in dir_scanned:
+        img_list.append(file)
+    return img_list
+
+
+def test_ranking(data_set, mx_model, batch_size, source_img_path, real_target_img_path, fake_target_img_path, replace,
                  data_extra=None, label_shape=None):
     print('Ranking..')
 
-    source_img = get_img_from_path(source_img_path)
-    real_target_img = get_img_from_path(real_target_img_path)
-    fake_target_img = get_img_from_path(fake_target_img_path)
+    if replace:
+        real_target_list = img_path_to_list(real_target_img_path)
+        fake_target_list = img_path_to_list(fake_target_img_path)
 
-    data_set[0][0][0] = source_img
-    data_set[0][0][1] = real_target_img
-    data_set[0][0][2] = fake_target_img
+
+        parser = argparse.ArgumentParser(description='face model test')
+        # # general
+        parser.add_argument('--image-size', default='112,112', help='')
+        parser.add_argument('--model', default='/home/deepjunior/PycharmProjects/unit_swap/insightface/models/model-r34-amf/model,0', help='path to load model.')
+        parser.add_argument('--gpu', default=0, type=int, help='gpu id')
+        parser.add_argument('--det', default=2, type=int, help='mtcnn option, 2 means using R+O, else using O')
+        parser.add_argument('--flip', default=0, type=int, help='whether do lr flip aug')
+        parser.add_argument('--threshold', default=1.24, type=float, help='ver dist threshold')
+        args = parser.parse_args()
+        face_model = FaceModel(args)
+        source_img = face_model.get_feature_ranking(cv2.imread(source_img_path))
+        real_target_images = []
+        fake_target_images = []
+        for img in real_target_list:
+            real_target_images.append(face_model.get_feature_ranking(cv2.imread(os.path.join(real_target_img_path, img))))
+        for img in fake_target_list:
+            fake_target_images.append(face_model.get_feature_ranking(cv2.imread(os.path.join(fake_target_img_path, img))))
+
 
     data_list = data_set[0]
     issame_list = data_set[1]
@@ -340,66 +382,75 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, target_img_pat
         _label = nd.ones((batch_size,))
     else:
         _label = nd.ones(label_shape)
-    for i in xrange(len(data_list)):
-        data = data_list[i]
-        embeddings = None
-        ba = 0
-        while ba < data.shape[0]:
-            bb = min(ba + batch_size, data.shape[0])
-            count = bb - ba
-            _data = nd.slice_axis(data, axis=0, begin=bb - batch_size, end=bb)
-            # print(_data.shape, _label.shape)
-            time0 = datetime.datetime.now()
-            if data_extra is None:
-                db = mx.io.DataBatch(data=(_data,), label=(_label,))
-            else:
-                db = mx.io.DataBatch(data=(_data, _data_extra), label=(_label,))
-            model.forward(db, is_train=False)
-            net_out = model.get_outputs()
-            # _arg, _aux = model.get_params()
-            # __arg = {}
-            # for k,v in _arg.iteritems():
-            #  __arg[k] = v.as_in_context(_ctx)
-            # _arg = __arg
-            # _arg["data"] = _data.as_in_context(_ctx)
-            # _arg["softmax_label"] = _label.as_in_context(_ctx)
-            # for k,v in _arg.iteritems():
-            #  print(k,v.context)
-            # exe = sym.bind(_ctx, _arg ,args_grad=None, grad_req="null", aux_states=_aux)
-            # exe.forward(is_train=False)
-            # net_out = exe.outputs
-            _embeddings = net_out[0].asnumpy()
-            time_now = datetime.datetime.now()
-            diff = time_now - time0
-            time_consumed += diff.total_seconds()
-            # print(_embeddings.shape)
-            if embeddings is None:
-                embeddings = np.zeros((data.shape[0], _embeddings.shape[1]))
-            embeddings[ba:bb, :] = _embeddings[(batch_size - count):, :]
-            ba = bb
-        embeddings_list.append(embeddings)
+    # for i in xrange(len(data_list)):
+    # data = data_list[i]
+    data = data_list[0]
+    if replace:
+        data[0] = source_img[0]
+        for idx, img in enumerate(real_target_images):
+            data[idx + 1] = real_target_images[idx]
+        for idx2, img in enumerate(fake_target_images):
+            data[idx + 1 + len(real_target_images)] = fake_target_images[idx]
+        n_replaced = len(real_target_images) + len(fake_target_images)
 
-    _xnorm = 0.0
-    _xnorm_cnt = 0
-    for embed in embeddings_list:
-        for i in xrange(embed.shape[0]):
-            _em = embed[i]
-            _norm = np.linalg.norm(_em)
-            # print(_em.shape, _norm)
-            _xnorm += _norm
-            _xnorm_cnt += 1
-    _xnorm /= _xnorm_cnt
+    embeddings = None
+    ba = 0
+    while ba < data.shape[0]:
+        bb = min(ba + batch_size, data.shape[0])
+        count = bb - ba
+        _data = nd.slice_axis(data, axis=0, begin=bb - batch_size, end=bb)
+        # print(_data.shape, _label.shape)
+        time0 = datetime.datetime.now()
+        if data_extra is None:
+            db = mx.io.DataBatch(data=(_data,), label=(_label,))
+        else:
+            db = mx.io.DataBatch(data=(_data, _data_extra), label=(_label,))
+        model.forward(db, is_train=False)
+        net_out = model.get_outputs()
+        # _arg, _aux = model.get_params()
+        # __arg = {}
+        # for k,v in _arg.iteritems():
+        #  __arg[k] = v.as_in_context(_ctx)
+        # _arg = __arg
+        # _arg["data"] = _data.as_in_context(_ctx)
+        # _arg["softmax_label"] = _label.as_in_context(_ctx)
+        # for k,v in _arg.iteritems():
+        #  print(k,v.context)
+        # exe = sym.bind(_ctx, _arg ,args_grad=None, grad_req="null", aux_states=_aux)
+        # exe.forward(is_train=False)
+        # net_out = exe.outputs
+        _embeddings = net_out[0].asnumpy()
+        time_now = datetime.datetime.now()
+        diff = time_now - time0
+        time_consumed += diff.total_seconds()
+        # print(_embeddings.shape)
+        if embeddings is None:
+            embeddings = np.zeros((data.shape[0], _embeddings.shape[1]))
+        embeddings[ba:bb, :] = _embeddings[(batch_size - count):, :]
+        ba = bb
+    # embeddings_list.append(embeddings)
 
-    embeddings = embeddings_list[0].copy()
-    embeddings = sklearn.preprocessing.normalize(embeddings)
-    acc1 = 0.0
-    std1 = 0.0
+    # _xnorm = 0.0
+    # _xnorm_cnt = 0
+    # for embed in embeddings_list:
+    #     for i in xrange(embed.shape[0]):
+    #         _em = embed[i]
+    #         _norm = np.linalg.norm(_em)
+    #         # print(_em.shape, _norm)
+    #         _xnorm += _norm
+    #         _xnorm_cnt += 1
+    # _xnorm /= _xnorm_cnt
+
+    # embeddings = embeddings_list[0].copy()
+    # embeddings = sklearn.preprocessing.normalize(embeddings)
+    # acc1 = 0.0
+    # std1 = 0.0
     # _, _, accuracy, val, val_std, far = evaluate(embeddings, issame_list, nrof_folds=10)
     # acc1, std1 = np.mean(accuracy), np.std(accuracy)
 
     # print('Validation rate: %2.5f+-%2.5f @ FAR=%2.5f' % (val, val_std, far))
     # embeddings = np.concatenate(embeddings_list, axis=1)
-    embeddings = embeddings_list[0] + embeddings_list[1]
+    # embeddings = embeddings_list[0] + embeddings_list[1]
     embeddings = sklearn.preprocessing.normalize(embeddings)
     print(embeddings.shape)
     print('infer time', time_consumed)
@@ -409,10 +460,16 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, target_img_pat
     # dist = get_distance(embeddings1=embeddings1, embeddings2=embeddings2)
 
     # acc2, std2 = np.mean(accuracy), np.std(accuracy)
-    source_embed = embeddings[0]
-    real_target_embed = embeddings[1]
-    fake_target_embed = embeddings[2]
-    other_embeddings = embeddings[3:]
+    if replace:
+        source_embed = embeddings[0]
+        real_target_embed = embeddings[1:len(real_target_images) + 1]
+        fake_target_embed = embeddings[len(real_target_images) + 1:len(real_target_images) + len(fake_target_images)+1]
+        other_embeddings = embeddings[len(real_target_images) + len(fake_target_images)+1:]
+    else:
+        other_embeddings = embeddings
+        source_embed = None
+        real_target_embed = None
+        fake_target_embed = None
     return source_embed, real_target_embed, fake_target_embed, other_embeddings
 
 
@@ -652,8 +709,10 @@ if __name__ == '__main__':
     # parser.add_argument('--data-dir', default='/home/deepjunior/PycharmProjects/unit_swap/InsightFace_TF/datasets/lfw_bin_changed', help='')
 
     parser.add_argument('--model', default='../../models/model-r34-amf/model, 0', help='path to load model.')
-    # parser.add_argument('--target', default='lfw,cfp_ff,cfp_fp,agedb_30', help='test targets.')
-    parser.add_argument('--target', default='lfw', help='test targets.')
+    # parser.add_argument('--model', default='../../models/model-r50-am-lfw/model, 0', help='path to load model.')
+    parser.add_argument('--target', default='lfw,cfp_ff,cfp_fp,agedb_30', help='test targets.')
+    # parser.add_argument('--target', default='agedb_30,cfp_ff,cfp_fp', help='test targets.')
+    # parser.add_argument('--target', default='lfw', help='test targets.')
     parser.add_argument('--gpu', default=0, type=int, help='gpu id')
     parser.add_argument('--batch-size', default=32, type=int, help='')
     parser.add_argument('--max', default='', type=str, help='')
@@ -714,43 +773,77 @@ if __name__ == '__main__':
             ver_list.append(data_set)
             ver_name_list.append(name)
 
+    all_embeddings = []
     if args.mode == 0:
         for i in xrange(len(ver_list)):
             results = []
             for model in nets:
-                # acc1, std1, acc2, std2, xnorm, embeddings_list = test(ver_list[i], model, args.batch_size, args.nfolds)
-                real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/real_aligned/00227_0.jpg'
-                fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/cage1/cage1_0.jpg'
-                # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned/00227_0.jpg'
-                source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/clooney2/clooney2_0.jpg'
-                source_embed, real_target_embed, fake_target_embed, other_embeddings = test_ranking(ver_list[i], model,
-                                                                                                    args.batch_size,
-                                                                                                    source_img_path,
-                                                                                                    real_target_img_path,
-                                                                                                    fake_target_img_path)
+                if i == 0:
+                    # acc1, std1, acc2, std2, xnorm, embeddings_list = test(ver_list[i], model, args.batch_size, args.nfolds)
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/real_aligned/00227_0.jpg'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/cage1/cage1_0.jpg'
+                    real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/real_aligned'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned/00227_0.jpg'
+                    fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned'
+                    source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/clooney2/clooney2_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/obama2/obama2_0.jpg'
+                    source_embed, real_target_embed, fake_target_embed, other_embeddings = test_ranking(ver_list[i],
+                                                                                                        model,
+                                                                                                        args.batch_size,
+                                                                                                        source_img_path,
+                                                                                                        real_target_img_path,
+                                                                                                        fake_target_img_path,
+                                                                                                        replace=True)
+                    all_embeddings = other_embeddings
+                else:
+                    _, _, _, other_embeddings = test_ranking(ver_list[i], model, args.batch_size, None, None, None,
+                                                                                                        replace=False)
+                    all_embeddings = np.vstack((all_embeddings, other_embeddings))
+        n_len = np.min((len(real_target_embed), len(fake_target_embed)))
+        source_to_real_target = np.zeros((n_len))
+        source_to_fake_target = np.zeros((n_len))
+        real_ranks = np.zeros((n_len))
+        fake_ranks = np.zeros((n_len))
+        source_to_all_distance = get_distance(source_embed, other_embeddings)
 
-                source_to_real_target = get_distance(source_embed, real_target_embed)
-                source_to_fake_target = get_distance(source_embed, fake_target_embed)
-                source_to_all_distance = get_distance(source_embed, other_embeddings)
-                source_to_all_distance_real = list(source_to_all_distance)
-                source_to_all_distance_real.insert(0, source_to_real_target)
-                source_to_all_distance_fake = list(source_to_all_distance)
-                source_to_all_distance_fake.insert(0, source_to_fake_target)
-                real_target_rank = np.argsort(source_to_all_distance_real).tolist().index(0)
-                fake_target_rank = np.argsort(source_to_all_distance_fake).tolist().index(0)
-                print('Real Target is ranked: ', real_target_rank)
-                print('Fake Target is ranked: ', fake_target_rank)
+        for idx in range(n_len):
+            source_to_real_target[idx] = get_distance(source_embed, real_target_embed[idx])
+            tmp_list = list(source_to_all_distance)
+            tmp_list.insert(0, source_to_real_target[idx])
+            real_ranks[idx] = np.argsort(tmp_list).tolist().index(0) + 1
 
-                # print('[%s]XNorm: %f' % (ver_name_list[i], xnorm))
-                # print('[%s]Accuracy: %1.5f+-%1.5f' % (ver_name_list[i], acc1, std1))
-                # print('[%s]Accuracy-Flip: %1.5f+-%1.5f' % (ver_name_list[i], acc2, std2))
-                # results.append(acc2)
-            # print('Max of [%s] is %1.5f' % (ver_name_list[i], np.max(results)))
+            source_to_fake_target[idx] = get_distance(source_embed, fake_target_embed[idx])
+            tmp_list = list(source_to_all_distance)
+            tmp_list.insert(0, source_to_fake_target[idx])
+            fake_ranks[idx] = np.argsort(tmp_list).tolist().index(0) + 1
+
+        print(' ')
+        print('Total dataset size: {0}'.format(len(all_embeddings)))
+        print(' ')
+        print('Real: ')
+        print('-----')
+        print('Mean: {0}, Median: {1}, Max: {2}, Min: {3}'.format(np.mean(real_ranks), np.median(real_ranks),
+                                                                 np.max(real_ranks), np.min(real_ranks)))
+        print(' ')
+        print('Fake: ')
+        print('-----')
+        print('Mean: {0}, Median: {1}, Max: {2}, Min: {3}'.format(np.mean(fake_ranks), np.median(fake_ranks),
+                                                                 np.max(fake_ranks), np.min(fake_ranks)))
+
+
+        plt.plot(real_ranks, 'b', label='Real Ranks')
+        plt.plot(real_ranks, '.b')
+        plt.plot(fake_ranks, 'k', label='Fake Ranks')
+        plt.plot(fake_ranks, '.k')
+        plt.legend()
+        plt.title('Real vs. Fake Ranking')
+        plt.xlabel('Frame')
+        plt.ylabel('Rank')
+        plt.pause(10)
+        print('End here')
     elif args.mode == 1:
         model = nets[0]
         test_badcase(ver_list[0], model, args.batch_size, args.target)
     else:
         model = nets[0]
         dumpR(ver_list[0], model, args.batch_size, args.target)
-
-

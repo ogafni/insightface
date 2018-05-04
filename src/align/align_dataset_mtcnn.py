@@ -32,7 +32,7 @@ import argparse
 import tensorflow as tf
 import numpy as np
 import facenet
-import align.detect_face
+# import align.detect_face
 import random
 from time import sleep
 
@@ -92,7 +92,7 @@ def main(args):
                         if img.ndim == 2:
                             img = facenet.to_rgb(img)
                         img = img[:,:,0:3]
-    
+
                         bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
                         nrof_faces = bounding_boxes.shape[0]
                         if nrof_faces>0:
@@ -119,21 +119,26 @@ def main(args):
                         else:
                             print('Unable to align "%s"' % image_path)
                             text_file.write('%s\n' % (output_filename))
-                            
+
     print('Total number of images: %d' % nrof_images_total)
     print('Number of successfully aligned images: %d' % nrof_successfully_aligned)
-            
+
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    
-    parser.add_argument('input_dir', type=str, help='Directory with unaligned images.')
-    parser.add_argument('output_dir', type=str, help='Directory with aligned face thumbnails.')
+
+    # parser.add_argument('input_dir', type=str, help='Directory with unaligned images.')
+    # parser.add_argument('output_dir', type=str, help='Directory with aligned face thumbnails.')
+    parser.add_argument('input_dir', type=str, default='/home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/raw_images',
+                        help='Directory with unaligned images.')
+    parser.add_argument('output_dir', type=str, default='/home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/aligned_images',
+                        help='Directory with aligned face thumbnails.')
+
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=182)
     parser.add_argument('--margin', type=int,
         help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
-    parser.add_argument('--random_order', 
+    parser.add_argument('--random_order',
         help='Shuffles the order of images to enable alignment using multiple processes.', action='store_true')
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)

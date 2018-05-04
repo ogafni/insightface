@@ -5,9 +5,13 @@ import sys
 import mxnet as mx
 import os
 import numpy as np
+#
+# input_dir = sys.argv[1]
+# output_dir = './data'
 
-input_dir = sys.argv[1]
-output_dir = './data'
+input_dir = '/home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/raw_images'
+output_dir = '/home/deepjunior/PycharmProjects/unit_swap/insightface/alignment3d/aligned_images'
+
 writer = mx.recordio.MXIndexedRecordIO(os.path.join(output_dir, 'train.idx'), os.path.join(output_dir, 'train.rec'), 'w')
 
 idx = 1
