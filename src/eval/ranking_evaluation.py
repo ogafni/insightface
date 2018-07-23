@@ -362,6 +362,7 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, real_target_im
         parser.add_argument('--threshold', default=1.24, type=float, help='ver dist threshold')
         args = parser.parse_args()
         face_model = FaceModel(args)
+        print(source_img_path)
         source_img = face_model.get_feature_ranking(cv2.imread(source_img_path))
         real_target_images = []
         fake_target_images = []
@@ -369,7 +370,6 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, real_target_im
             real_target_images.append(face_model.get_feature_ranking(cv2.imread(os.path.join(real_target_img_path, img))))
         for img in fake_target_list:
             fake_target_images.append(face_model.get_feature_ranking(cv2.imread(os.path.join(fake_target_img_path, img))))
-
 
     data_list = data_set[0]
     issame_list = data_set[1]
@@ -385,12 +385,24 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, real_target_im
     # for i in xrange(len(data_list)):
     # data = data_list[i]
     data = data_list[0]
+    count_real = 0
+    count_fake = 0
     if replace:
         data[0] = source_img[0]
+        for a_idx, a in enumerate(real_target_images):
+            if a is None:
+                del real_target_images[a_idx]
+                count_real += 1
+
+        for a_idx, a in enumerate(fake_target_images):
+            if a is None:
+                del fake_target_images[a_idx]
+                count_fake += 1
+
         for idx, img in enumerate(real_target_images):
             data[idx + 1] = real_target_images[idx]
         for idx2, img in enumerate(fake_target_images):
-            data[idx + 1 + len(real_target_images)] = fake_target_images[idx]
+            data[idx2 + 1 + len(real_target_images)] = fake_target_images[idx2]
         n_replaced = len(real_target_images) + len(fake_target_images)
 
     embeddings = None
@@ -462,9 +474,10 @@ def test_ranking(data_set, mx_model, batch_size, source_img_path, real_target_im
     # acc2, std2 = np.mean(accuracy), np.std(accuracy)
     if replace:
         source_embed = embeddings[0]
-        real_target_embed = embeddings[1:len(real_target_images) + 1]
-        fake_target_embed = embeddings[len(real_target_images) + 1:len(real_target_images) + len(fake_target_images)+1]
-        other_embeddings = embeddings[len(real_target_images) + len(fake_target_images)+1:]
+        real_target_embed = embeddings[1:len(real_target_images) + 1 - count_real]
+        fake_target_embed = embeddings[len(real_target_images) + 1 - count_real :len(real_target_images) +
+                                                                                 len(fake_target_images)+1 - count_real - count_fake]
+        other_embeddings = embeddings[len(real_target_images) + len(fake_target_images)+1 - count_real - count_fake:]
     else:
         other_embeddings = embeddings
         source_embed = None
@@ -708,8 +721,8 @@ if __name__ == '__main__':
     parser.add_argument('--data-dir', default='../../datasets/faces_ms1m_112x112', help='')
     # parser.add_argument('--data-dir', default='/home/deepjunior/PycharmProjects/unit_swap/InsightFace_TF/datasets/lfw_bin_changed', help='')
 
-    parser.add_argument('--model', default='../../models/model-r34-amf/model, 0', help='path to load model.')
-    # parser.add_argument('--model', default='../../models/model-r50-am-lfw/model, 0', help='path to load model.')
+    # parser.add_argument('--model', default='../../models/model-r34-amf/model, 0', help='path to load model.')
+    parser.add_argument('--model', default='../../models/model-r50-am-lfw/model, 0', help='path to load model.')
     parser.add_argument('--target', default='lfw,cfp_ff,cfp_fp,agedb_30', help='test targets.')
     # parser.add_argument('--target', default='agedb_30,cfp_ff,cfp_fp', help='test targets.')
     # parser.add_argument('--target', default='lfw', help='test targets.')
@@ -782,18 +795,43 @@ if __name__ == '__main__':
                     # acc1, std1, acc2, std2, xnorm, embeddings_list = test(ver_list[i], model, args.batch_size, args.nfolds)
                     # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/real_aligned/00227_0.jpg'
                     # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/cage1/cage1_0.jpg'
-                    real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/real_aligned'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/videos/images/gadot2'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/videos/images/scarlet_short_60fps_720/aligned'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/corgan_n_60fps_aligned/'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/simone_60fps_aligned/'
+                    real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/jessica2_60fps/aligned/'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/videos/images/selena_60fps_720/aligned'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/s0_60fps_aligned/'
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/s0_60fps_aligned/'
+
+                    # real_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/videos/images/clooney1_60fps/aligned/'
                     # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned/00227_0.jpg'
-                    fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned'
-                    source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/clooney2/clooney2_0.jpg'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/videos/clooney1/images/de-id_aligned'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/unet_128/videos/images/gadot2_gadot1_de-id_raw'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/unet_128/videos/images/de-id_selena_60fps_selena_exp13a5a2_b10e8_alignments_raw_ld720'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/unet_128/videos/images/de-id_scarlet_short_60fps_scarlet_old_exp13a5a2_b10e8_alignments_raw_ld720/aligned'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/corgan_n_60fps_corgan/aligned/'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/simone_60fps_simone/aligned/'
+                    fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/jessica2_60fps_sarah_aligned/'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/unet_128/videos/images/de-id_selena_60fps_selena_exp13a5a2_b10e8_alignments_raw_ld720/aligned'
+                    # fake_target_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/s0_60fps_steve/aligned/'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/clooney2/clooney2_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/merkel1/merkel_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/new/gadot1.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/scarlet/scarlet_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/corgan_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/simone_0.jpg'
+                    source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/sarah_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/selena/selena_0.jpg'
+                    # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/id_distancing/output_images/steve_0.jpg'
                     # source_img_path = '/home/deepjunior/PycharmProjects/unit_swap/df_fs/faceswap/experiments/targets/aligned/obama2/obama2_0.jpg'
-                    source_embed, real_target_embed, fake_target_embed, other_embeddings = test_ranking(ver_list[i],
-                                                                                                        model,
-                                                                                                        args.batch_size,
-                                                                                                        source_img_path,
-                                                                                                        real_target_img_path,
-                                                                                                        fake_target_img_path,
-                                                                                                        replace=True)
+                    source_embed, real_target_embed, fake_target_embed, other_embeddings, = test_ranking(ver_list[i],
+                                                                                                         model,
+                                                                                                         args.batch_size,
+                                                                                                         source_img_path,
+                                                                                                         real_target_img_path,
+                                                                                                         fake_target_img_path,
+                                                                                                         replace=True)
                     all_embeddings = other_embeddings
                 else:
                     _, _, _, other_embeddings = test_ranking(ver_list[i], model, args.batch_size, None, None, None,
@@ -822,13 +860,13 @@ if __name__ == '__main__':
         print(' ')
         print('Real: ')
         print('-----')
-        print('Mean: {0}, Median: {1}, Max: {2}, Min: {3}'.format(np.mean(real_ranks), np.median(real_ranks),
-                                                                 np.max(real_ranks), np.min(real_ranks)))
+        print('Median: {0}, Mean: {1}, Min: {2}, Max: {3}, STD: {4}'.format(np.median(real_ranks), np.mean(real_ranks),
+                                                                 np.min(real_ranks), np.max(real_ranks), np.std(real_ranks)))
         print(' ')
         print('Fake: ')
         print('-----')
-        print('Mean: {0}, Median: {1}, Max: {2}, Min: {3}'.format(np.mean(fake_ranks), np.median(fake_ranks),
-                                                                 np.max(fake_ranks), np.min(fake_ranks)))
+        print('Median: {0}, Mean: {1},  Min: {2}, Max: {3}, STD: {4}'.format(np.median(fake_ranks), np.mean(fake_ranks),
+                                                                 np.min(fake_ranks), np.max(fake_ranks), np.std(fake_ranks)))
 
 
         plt.plot(real_ranks, 'b', label='Real Ranks')
@@ -839,7 +877,7 @@ if __name__ == '__main__':
         plt.title('Real vs. Fake Ranking')
         plt.xlabel('Frame')
         plt.ylabel('Rank')
-        plt.pause(10)
+        plt.pause(20)
         print('End here')
     elif args.mode == 1:
         model = nets[0]
